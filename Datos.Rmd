@@ -1,0 +1,218 @@
+---
+title: "Series de tiempo"
+author: "Andreas Sanabria"
+date: "2024-08-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readr)
+library(ggplot2)
+library(lubridate)
+library(TSA)
+library(TTR)
+library(tseries)
+library(forecast)
+library(TSstudio)
+
+setwd("C:/Users/andre/OneDrive/Documentos/UCR/SERIES/PROYECTO")
+```
+
+# CRC/USD
+
+## Preguntas de investigación
+
+Precisión predictiva muy técnico
+
+Reducir lenguaje
+
+Hacer una pregunta más entendible
+
+Modelos de volatilidad del tipo de cambio es muy técnico
+
+Hablar de la variable de interés
+
+Más específicos con las variables macroeconómicas o dejarlo así
+
+No incluir lenguaje técnico
+
+Cuidado con la variable dependiente. Definición
+
+Variabilidad se entiende más
+
+No hablar de métricas. Hablar de predecir directamente
+
+Más coloquial
+
+Predicción a corto plazo
+
+Incertidumbre
+
+¿Cómo puede la inclusión de variables macroeconómicas mejorar la precisión predictiva a corto plazo de los modelos de volatilidad del tipo de cambio entre el colón costarricense y el dólar estadounidense?
+
+¿De qué manera la incorporación de variables macroeconómicas podría influir en la predición a corto plazo de las fluctuaciones en el tipo de cambio entre el colón costarricense y el dólar estadounidense?
+
+¿De qué manera la incorporación de variables macroeconómicas afecta la predición a corto plazo de las fluctuaciones en el tipo de cambio entre el colón costarricense y el dólar estadounidense?
+
+¿Cómo afecta la inclusión de variables macroeconómicas en la predición a corto plazo de la variabilidad del tipo de cambio entre el colón costarricense y el dólar estadounidense?
+
+
+
+
+## Lectura de los datos
+
+### Tasa de cambio CRC/USD
+
+HACER RENDIMIENTOS LOGARÍTMICOS
+
+```{r}
+cambio <- read.csv("cambio2.csv", sep = ";", header = F)
+
+cambio <- tail(cambio, 365)
+
+colnames(cambio)[1:2] <- c("Compra", "Venta")
+
+precio <- (cambio$Venta + cambio$Compra)/2
+
+precio.ts <- ts(precio, frequency = 365)
+
+plot.ts(precio.ts, main = "Fig 1: Precio del dólar en colones 2019-2023", col = "blue", ylab = "Precio", xlab = "Tiempo (días)")
+```
+
+```{r}
+summary(precio.ts)
+```
+
+```{r}
+lag.plot(precio.ts, lags = 1, set.lags = 3)
+lag.plot(precio.ts, lags = 1, set.lags = 7)
+lag.plot(precio.ts, lags = 1, set.lags = 15)
+lag.plot(precio.ts, lags = 1, set.lags = 30)
+lag.plot(precio.ts, lags = 1, set.lags = 60)
+lag.plot(precio.ts, lags = 1, set.lags = 90)
+lag.plot(precio.ts, lags = 1, set.lags = 120)
+lag.plot(precio.ts, lags = 1, set.lags = 240)
+```
+
+```{r}
+fit <- lm(precio.ts ~ time(precio.ts), na.action = NULL)
+
+plot(resid(fit))
+plot(diff(precio.ts))
+
+acf(precio.ts, 15)
+acf(resid(fit), 15)
+acf(diff(precio.ts), 15)
+```
+
+```{r}
+ma <- filter(precio.ts, rep(1/30,30), sides=2)
+ma2 <- filter(precio.ts, rep(1/90,90), sides=2)
+ma3 <- filter(precio.ts, rep(1/120,120), sides=2)
+plot(precio.ts)
+lines(ma, col="red")
+lines(ma2, col="blue")
+lines(ma3, col="green")
+```
+
+```{r}
+plot(precio.ts)
+lines(ksmooth(time(precio.ts), precio.ts, "normal", bandwidth=1/5), col = "red")
+```
+
+### Tasa de Política Monetaria
+
+Según acuerdo de Junta Directiva Sesión 5500-2011 celebrada el 08 de junio del 2011, se define la Tasa de Política Monetaria (TPM) como la tasa de interés objetivo del BCCR, utilizada como referencia para conducir el costo de las operaciones a un día plazo en el Mercado Integrado de Liquidez dentro de un corredor formado por las tasas de interés de sus facilidades permanentes de depósito y crédito. Es determinada por la Junta Directiva de esta Entidad.
+
+```{r}
+tpm <- read.csv("tpm.csv", sep = ";", header = F)
+
+colnames(tpm)[1:1] <- c("TPM")
+
+tpm$TPM <- gsub(",", ".", tpm$TPM)
+
+tpm$TPM <- as.numeric(tpm$TPM)
+
+tpm.ts <- ts(tpm, frequency = 365.25)
+
+plot.ts(tpm.ts, main = "Fig 2: Tasa de Política Monetaria 2019-2023", col = "blue", ylab = "TPM", xlab = " (días)")
+```
+
+```{r}
+summary(tpm.ts)
+acf(tpm.ts)
+```
+
+### Tasa Básica Pasiva
+
+```{r}
+tbp <- read.csv("tbp.csv", sep = ";", header = T)
+
+tbp$TBP <- gsub(",", ".", tbp$TBP)
+
+tbp$TBP <- as.numeric(tbp$TBP)
+
+tbp.ts <- ts(tbp, start = c(2019, as.numeric(format(inds[1], "%j"))), frequency = 365)
+
+plot.ts(tbp.ts, main = "Fig 3: Tasa Básica Pasiva 2019-2023", col = "blue", ylab = "TPM", xlab = " (días)")
+```
+
+```{r}
+summary(tbp.ts)
+acf(tbp.ts)
+plot(ts_decompose(tbp.ts, type = "both"))
+```
+
+### Federal Funds Effective Rate (FFER)
+
+La tasa de fondos federales es la tasa de interés a la que las instituciones depositarias intercambian fondos federales (saldos mantenidos en los bancos de la Reserva Federal) entre sí durante la noche. Cuando una institución depositaria tiene saldos excedentes en su cuenta de reserva, presta a otros bancos que necesitan saldos mayores. En términos más simples, un banco con exceso de efectivo, lo que a menudo se conoce como liquidez, prestará a otro banco que necesita aumentar rápidamente la liquidez. La tasa que la institución prestataria paga a la institución prestamista se determina entre los dos bancos; la tasa promedio ponderada para todos estos tipos de negociaciones se denomina tasa efectiva de fondos federales. La tasa efectiva de fondos federales está determinada esencialmente por el mercado, pero la Reserva Federal influye en ella a través de operaciones de mercado abierto para alcanzar la tasa objetivo de fondos federales.
+
+```{r}
+ffer <- read.csv("FEDFUNDS.csv", sep = ",", header = T)
+
+ffer.ts <- ts(ffer$FEFUNDS, , start = c(2019, as.numeric(format(inds[1], "%j"))), frequency = 12)
+
+plot.ts(ffer.ts, main = "Fig 4: FFER 2019-2023", col = "blue", ylab = "FFER", xlab = "Tiempo (meses)")
+```
+
+```{r}
+summary(ffer.ts)
+```
+
+### Índice de Precios al Consumidor (IPC)
+
+```{r}
+ipc <- read.csv("ipc.csv", sep = ";")
+
+ipc$Nivel <- gsub(",", ".", ipc$Nivel)
+
+ipc$Nivel <- as.numeric(ipc$Nivel)
+
+ipc.ts <- ts(ipc$Nivel, start = c(2019, as.numeric(format(inds[1], "%j"))), frequency = 12)
+
+plot.ts(ipc.ts, main = "Fig 5: índice de Precios al Consumidor 2019-2023", col = "blue", ylab = "IPC", xlab = "Tiempo (meses)")
+```
+
+```{r}
+summary(ipc.ts)
+```
+
+### Índice Mensual de Actividad Económica (IMAE)
+
+```{r}
+imae <- read.csv("imae.csv", sep = ";")
+
+imae$Nivel <- gsub(",", ".", imae$Nivel)
+
+imae$Nivel <- as.numeric(imae$Nivel)
+
+imae.ts <- ts(imae$Nivel, start = c(2019, as.numeric(format(inds[1], "%j"))), frequency = 12)
+
+plot.ts(imae.ts, main = "Fig 6: Índice Mensual de Actividad Económica 2019-2023", col = "blue", ylab = "IMAE", xlab = "Tiempo (meses)")
+```
+
+```{r}
+summary(imae.ts)
+```
