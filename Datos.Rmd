@@ -16,6 +16,7 @@ library(TTR)
 library(tseries)
 library(forecast)
 library(TSstudio)
+library(rugarch)
 
 setwd("C:/Users/andre/OneDrive/Documentos/UCR/SERIES/PROYECTO")
 ```
@@ -24,53 +25,30 @@ setwd("C:/Users/andre/OneDrive/Documentos/UCR/SERIES/PROYECTO")
 
 ## Preguntas de investigación
 
-Precisión predictiva muy técnico
+### Auxuliar
 
-Reducir lenguaje
+```{r}
+cola <- function(x){
+  if(nrow(x) > 60){
+    return(x <- tail(x, 365))
+  } else{
+    return(x <- tail(x, 12))
+  }
+}
 
-Hacer una pregunta más entendible
-
-Modelos de volatilidad del tipo de cambio es muy técnico
-
-Hablar de la variable de interés
-
-Más específicos con las variables macroeconómicas o dejarlo así
-
-No incluir lenguaje técnico
-
-Cuidado con la variable dependiente. Definición
-
-Variabilidad se entiende más
-
-No hablar de métricas. Hablar de predecir directamente
-
-Más coloquial
-
-Predicción a corto plazo
-
-Incertidumbre
-
-¿Cómo puede la inclusión de variables macroeconómicas mejorar la precisión predictiva a corto plazo de los modelos de volatilidad del tipo de cambio entre el colón costarricense y el dólar estadounidense?
-
-¿De qué manera la incorporación de variables macroeconómicas podría influir en la predición a corto plazo de las fluctuaciones en el tipo de cambio entre el colón costarricense y el dólar estadounidense?
-
-¿De qué manera la incorporación de variables macroeconómicas afecta la predición a corto plazo de las fluctuaciones en el tipo de cambio entre el colón costarricense y el dólar estadounidense?
-
-¿Cómo afecta la inclusión de variables macroeconómicas en la predición a corto plazo de la variabilidad del tipo de cambio entre el colón costarricense y el dólar estadounidense?
-
-
-
+#cola <- function(x){
+  #return(x)
+#}
+```
 
 ## Lectura de los datos
 
 ### Tasa de cambio CRC/USD
 
-HACER RENDIMIENTOS LOGARÍTMICOS
-
 ```{r}
 cambio <- read.csv("cambio2.csv", sep = ";", header = F)
 
-cambio <- tail(cambio, 365)
+cambio <- cola(cambio)
 
 colnames(cambio)[1:2] <- c("Compra", "Venta")
 
@@ -78,7 +56,7 @@ precio <- (cambio$Venta + cambio$Compra)/2
 
 precio.ts <- ts(precio, frequency = 365)
 
-plot.ts(precio.ts, main = "Fig 1: Precio del dólar en colones 2019-2023", col = "blue", ylab = "Precio", xlab = "Tiempo (días)")
+plot.ts(precio.ts, main = "Fig 1: Precio del dólar en colones 2023", col = "blue", ylab = "Precio", xlab = "Tiempo (días)")
 ```
 
 ```{r}
@@ -119,7 +97,57 @@ lines(ma3, col="green")
 
 ```{r}
 plot(precio.ts)
-lines(ksmooth(time(precio.ts), precio.ts, "normal", bandwidth=1/5), col = "red")
+lines(ksmooth(time(precio.ts), precio.ts, "normal", bandwidth = 1/5), col = "red")
+```
+
+### Rendimientos simples
+
+```{r}
+rend <- diff(precio.ts, lag = 1)
+
+plot.ts(rend, main = "Rendimientos simples", col = "blue", ylab = "u_i", xlab = "Tiempo (días)")
+```
+
+```{r}
+hist(rend, 
+     breaks = 30, 
+     probability = TRUE, 
+     col = "lightblue", 
+     main = "Histograma de rendimientos simples vs. distribución normal",
+     xlab = "Rendimientos simples")
+
+curve(dnorm(x, mean = mean(rend), sd = sd(rend)), 
+      col = "red", 
+      lwd = 2, 
+      add = TRUE)
+
+legend("topright", legend = c("Rendimientos", "Distribución normal"), 
+       col = c("lightblue", "red"), lwd = c(5, 2))
+```
+
+### Rendimientos logarítmicos
+
+```{r}
+rend.log <- diff(log(precio.ts), lag = 1)
+
+plot.ts(rend.log, main = "Rendimimientos logarítmicos", col = "blue", ylab = "u_i", xlab = "Tiempo (días)")
+```
+
+```{r}
+hist(rend.log, 
+     breaks = 30, 
+     probability = TRUE, 
+     col = "lightblue", 
+     main = "Histograma de rendimientos logarítmicos vs. distribución normal",
+     xlab = "Rendimientos logarítmicos")
+
+curve(dnorm(x, mean = mean(rend.log), sd = sd(rend.log)), 
+      col = "red", 
+      lwd = 2, 
+      add = TRUE)
+
+legend("topright", legend = c("Rendimientos logarítmicos", "Distribución normal"), 
+       col = c("lightblue", "red"), lwd = c(5, 2))
 ```
 
 ### Tasa de Política Monetaria
@@ -135,14 +163,45 @@ tpm$TPM <- gsub(",", ".", tpm$TPM)
 
 tpm$TPM <- as.numeric(tpm$TPM)
 
-tpm.ts <- ts(tpm, frequency = 365.25)
+tpm <- cola(tpm)
 
-plot.ts(tpm.ts, main = "Fig 2: Tasa de Política Monetaria 2019-2023", col = "blue", ylab = "TPM", xlab = " (días)")
+tpm.ts <- ts(tpm, frequency = 365)
+
+plot.ts(tpm.ts, main = "Fig 2: Tasa de Política Monetaria 2023", col = "blue", ylab = "TPM", xlab = " (días)")
 ```
 
 ```{r}
-summary(tpm.ts)
-acf(tpm.ts)
+lag.plot(tpm.ts, lags = 1, set.lags = 15)
+lag.plot(tpm.ts, lags = 1, set.lags = 30)
+lag.plot(tpm.ts, lags = 1, set.lags = 60)
+lag.plot(tpm.ts, lags = 1, set.lags = 90)
+lag.plot(tpm.ts, lags = 1, set.lags = 120)
+```
+
+```{r}
+fit <- lm(tpm.ts ~ time(tpm.ts), na.action = NULL)
+
+plot(resid(fit))
+plot(diff(tpm.ts))
+
+acf(tpm.ts, 30)
+acf(resid(fit), 30)
+acf(diff(tpm.ts), 30)
+```
+
+```{r}
+ma <- filter(tpm.ts, rep(1/30,30), sides=2)
+ma2 <- filter(tpm.ts, rep(1/90,90), sides=2)
+ma3 <- filter(tpm.ts, rep(1/120,120), sides=2)
+plot(tpm.ts)
+lines(ma, col="red")
+lines(ma2, col="blue")
+lines(ma3, col="green")
+```
+
+```{r}
+plot(tpm.ts)
+lines(ksmooth(time(tpm.ts), tpm.ts, "normal", bandwidth = 1/5), col = "red")
 ```
 
 ### Tasa Básica Pasiva
@@ -154,15 +213,46 @@ tbp$TBP <- gsub(",", ".", tbp$TBP)
 
 tbp$TBP <- as.numeric(tbp$TBP)
 
-tbp.ts <- ts(tbp, start = c(2019, as.numeric(format(inds[1], "%j"))), frequency = 365)
+tbp <- cola(tbp)
 
-plot.ts(tbp.ts, main = "Fig 3: Tasa Básica Pasiva 2019-2023", col = "blue", ylab = "TPM", xlab = " (días)")
+tbp.ts <-ts(tbp, frequency = 365)
+
+plot.ts(tbp.ts, main = "Fig 3: Tasa Básica Pasiva 2023", col = "blue", ylab = "TPM", xlab = " (días)")
 ```
 
 ```{r}
-summary(tbp.ts)
-acf(tbp.ts)
-plot(ts_decompose(tbp.ts, type = "both"))
+lag.plot(tbp.ts, lags = 1, set.lags = 3)
+lag.plot(tbp.ts, lags = 1, set.lags = 7)
+lag.plot(tbp.ts, lags = 1, set.lags = 15)
+lag.plot(tbp.ts, lags = 1, set.lags = 30)
+lag.plot(tbp.ts, lags = 1, set.lags = 60)
+lag.plot(tbp.ts, lags = 1, set.lags = 90)
+```
+
+```{r}
+fit <- lm(tbp.ts ~ time(tbp.ts), na.action = NULL)
+
+plot(resid(fit))
+plot(diff(tbp.ts))
+
+acf(tbp.ts, 15)
+acf(resid(fit), 15)
+acf(diff(tbp.ts), 15)
+```
+
+```{r}
+ma <- filter(tbp.ts, rep(1/30,30), sides=2)
+ma2 <- filter(tbp.ts, rep(1/90,90), sides=2)
+ma3 <- filter(tbp.ts, rep(1/120,120), sides=2)
+plot(tbp.ts)
+lines(ma, col="red")
+lines(ma2, col="blue")
+lines(ma3, col="green")
+```
+
+```{r}
+plot(tbp.ts)
+lines(ksmooth(time(tbp.ts), tbp.ts, "normal", bandwidth = 0.2), col = "red")
 ```
 
 ### Federal Funds Effective Rate (FFER)
@@ -172,13 +262,47 @@ La tasa de fondos federales es la tasa de interés a la que las instituciones de
 ```{r}
 ffer <- read.csv("FEDFUNDS.csv", sep = ",", header = T)
 
-ffer.ts <- ts(ffer$FEFUNDS, , start = c(2019, as.numeric(format(inds[1], "%j"))), frequency = 12)
+ffer <- cola(ffer)
 
-plot.ts(ffer.ts, main = "Fig 4: FFER 2019-2023", col = "blue", ylab = "FFER", xlab = "Tiempo (meses)")
+ffer.ts <- ts(ffer$FEFUNDS, frequency = 12)
+
+plot.ts(ffer.ts, main = "Fig 4: FFER 2023", col = "blue", ylab = "FFER", xlab = "Tiempo (meses)")
 ```
 
 ```{r}
 summary(ffer.ts)
+```
+
+```{r}
+lag.plot(ffer.ts, lags = 1, set.lags = 1)
+lag.plot(ffer.ts, lags = 1, set.lags = 3)
+lag.plot(ffer.ts, lags = 1, set.lags = 6)
+```
+
+```{r}
+fit <- lm(ffer.ts ~ time(ffer.ts), na.action = NULL)
+
+plot(resid(fit))
+plot(diff(ffer.ts))
+
+acf(ffer.ts, 1)
+acf(resid(fit), 1)
+acf(diff(ffer.ts), 1)
+```
+
+```{r}
+ma <- filter(ffer.ts, rep(1/2,2), sides=2)
+ma2 <- filter(ffer.ts, rep(1/3,3), sides=2)
+ma3 <- filter(ffer.ts, rep(1/6,6), sides=2)
+plot(ffer.ts)
+lines(ma, col="red")
+lines(ma2, col="blue")
+lines(ma3, col="green")
+```
+
+```{r}
+plot(ffer.ts)
+lines(ksmooth(time(ffer.ts), ffer.ts, "normal", bandwidth = 0.2), col = "red")
 ```
 
 ### Índice de Precios al Consumidor (IPC)
@@ -190,13 +314,47 @@ ipc$Nivel <- gsub(",", ".", ipc$Nivel)
 
 ipc$Nivel <- as.numeric(ipc$Nivel)
 
-ipc.ts <- ts(ipc$Nivel, start = c(2019, as.numeric(format(inds[1], "%j"))), frequency = 12)
+ipc <- cola(ipc)
 
-plot.ts(ipc.ts, main = "Fig 5: índice de Precios al Consumidor 2019-2023", col = "blue", ylab = "IPC", xlab = "Tiempo (meses)")
+ipc.ts <- ts(ipc$Nivel, frequency = 12)
+
+plot.ts(ipc.ts, main = "Fig 5: índice de Precios al Consumidor 2023", col = "blue", ylab = "IPC", xlab = "Tiempo (meses)")
 ```
 
 ```{r}
 summary(ipc.ts)
+```
+
+```{r}
+lag.plot(ipc.ts, lags = 1, set.lags = 1)
+lag.plot(ipc.ts, lags = 1, set.lags = 3)
+lag.plot(ipc.ts, lags = 1, set.lags = 6)
+```
+
+```{r}
+fit <- lm(ipc.ts ~ time(ipc.ts), na.action = NULL)
+
+plot(resid(fit))
+plot(diff(ipc.ts))
+
+acf(ipc.ts, 1)
+acf(resid(fit), 1)
+acf(diff(ipc.ts), 1)
+```
+
+```{r}
+ma <- filter(ipc.ts, rep(1/2,2), sides=2)
+ma2 <- filter(ipc.ts, rep(1/3,3), sides=2)
+ma3 <- filter(ipc.ts, rep(1/6,6), sides=2)
+plot(ipc.ts)
+lines(ma, col="red")
+lines(ma2, col="blue")
+lines(ma3, col="green")
+```
+
+```{r}
+plot(ipc.ts)
+lines(ksmooth(time(ipc.ts), ipc.ts, "normal", bandwidth = 0.2), col = "red")
 ```
 
 ### Índice Mensual de Actividad Económica (IMAE)
@@ -208,11 +366,45 @@ imae$Nivel <- gsub(",", ".", imae$Nivel)
 
 imae$Nivel <- as.numeric(imae$Nivel)
 
-imae.ts <- ts(imae$Nivel, start = c(2019, as.numeric(format(inds[1], "%j"))), frequency = 12)
+imae <- cola(imae)
 
-plot.ts(imae.ts, main = "Fig 6: Índice Mensual de Actividad Económica 2019-2023", col = "blue", ylab = "IMAE", xlab = "Tiempo (meses)")
+imae.ts <- ts(imae$Nivel, frequency = 12)
+
+plot.ts(imae.ts, main = "Fig 6: Índice Mensual de Actividad Económica 2023", col = "blue", ylab = "IMAE", xlab = "Tiempo (meses)")
 ```
 
 ```{r}
 summary(imae.ts)
+```
+
+```{r}
+lag.plot(imae.ts, lags = 1, set.lags = 1)
+lag.plot(imae.ts, lags = 1, set.lags = 3)
+lag.plot(imae.ts, lags = 1, set.lags = 6)
+```
+
+```{r}
+fit <- lm(imae.ts ~ time(imae.ts), na.action = NULL)
+
+plot(resid(fit))
+plot(diff(imae.ts))
+
+acf(imae.ts, 1)
+acf(resid(fit), 1)
+acf(diff(imae.ts), 1)
+```
+
+```{r}
+ma <- filter(imae.ts, rep(1/2,2), sides=2)
+ma2 <- filter(imae.ts, rep(1/3,3), sides=2)
+ma3 <- filter(imae.ts, rep(1/6,6), sides=2)
+plot(imae.ts)
+lines(ma, col="red")
+lines(ma2, col="blue")
+lines(ma3, col="green")
+```
+
+```{r}
+plot(imae.ts)
+lines(ksmooth(time(imae.ts), imae.ts, "normal", bandwidth = 1/5), col = "red")
 ```
