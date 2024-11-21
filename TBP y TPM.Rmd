@@ -1,0 +1,400 @@
+---
+title: "Series de tiempo"
+author: "ARIMAX TBP Y TMP"
+date: "2024-08-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readr)
+library(ggplot2)
+library(lubridate)
+library(TSA)
+library(TTR)
+library(tseries)
+library(forecast)
+library(TSstudio)
+library(rugarch)
+library(astsa)
+library(gridExtra)
+library(FinTS)
+library(stargazer)
+library(lmtest)
+library(car)
+library(strucchange)
+
+
+setwd("C:/Users/Caro/OneDrive - Universidad de Costa Rica/Escritorio/Caro UCR/II semestre 2024/Series de tiempo/Proyecto código/Proyecto-Series-de-Tiempo/")
+
+
+```
+
+# Tasa de Política Monetaria
+
+```{r}
+tpm <- read.csv("tpm.csv", sep = ";", header = T)
+tpm <- tpm[-1,]
+
+colnames(tpm)[2:2] <- c("TPM")
+
+tpm$TPM <- gsub(",", ".", tpm$TPM)
+
+tpm$TPM <- as.numeric(tpm$TPM)
+
+tpm <- tpm$TPM
+
+tpm <- tpm
+
+tpm.ts <- ts(tpm, start = c(2023,1), frequency = 365)
+print(tpm.ts)
+
+plot.ts(tpm.ts, main = "Fig 2: Tasa de Política Monetaria 2023", col = "blue", ylab = "TPM", xlab = " (días)")
+
+
+```
+
+### Tasa Básica Pasiva
+
+```{r}
+tbp <- read.csv("tbp.csv", sep = ";", header = T)
+tbp <- tbp[-1,]
+
+colnames(tbp)[2:2] <- c("TBP")
+
+tbp$TBP <- gsub(",", ".", tbp$TBP)
+
+tbp$TBP <- as.numeric(tbp$TBP)
+
+tbp <- tbp$TBP
+
+tbp.ts <-ts(tbp, start = c(2023, 1), frequency = 365)
+
+plot.ts(tbp.ts, main = "Fig 3: Tasa Básica Pasiva 2023", col = "blue", ylab = "TPM", xlab = " (días)")
+
+```
+
+## TEST para ver la estacionalidad
+
+```{r}
+adf.test(tpm.ts)
+adf.test(tbp.ts)
+```
+Por tanto, como los p-valores son superiores a 0.05, las series no son estacionarias
+
+
+```{r}
+#adf.test(tpm.spl.ts)
+#adf.test(tbp.spl.ts)
+```
+# Tipo de cambio
+
+```{r}
+cola <- function(x){
+  if(nrow(x) > 60){
+    return(x <- tail(x, 365))
+  } else{
+    return(x <- tail(x, 12))
+  }
+}
+
+#cola <- function(x){
+  #return(x)
+#}
+```
+
+## Lectura de los datos
+
+### Tasa de cambio CRC/USD
+
+```{r}
+cambio <- read.csv("cambio2.csv", sep = ";", header = F)
+
+cambio <- cola(cambio)
+
+colnames(cambio)[1:2] <- c("Compra", "Venta")
+
+precio <- (cambio$Compra + cambio$Venta)/2
+
+precio.ts <- ts(precio, start = c(2023, 1), frequency = 365)
+```
+
+### Transformación
+```{r}
+rend.log <- diff(log(precio.ts))
+acf(rend.log)
+```
+
+```{r}
+
+adf.test(rend.log)
+```
+
+Es estacionario.
+
+# Separación datos
+
+```{r}
+# Endogena
+estacionaria <- cbind(rend.log)
+  
+muestra_end <- window(estacionaria,
+                      start = c(2023, 1),
+                      end = c(2023,336),
+                      freq = 365)
+
+# Exogena
+muestra_exo <- tpm.ts
+
+   # Exogena para la estimacion
+   muestra_exo1 <- window(muestra_exo, 
+                          start = c(2023, 1),
+                          end = c(2023,335),
+                          freq = 365)
+
+   # Exogena para la proyeccion
+   muestra_exo2 <- window(muestra_exo,
+                          start = c(2023, 336),
+                          end = c(2023, 365),
+                          freq = 365)
+
+```
+
+# Correlograma
+
+```{r}
+# Correlograma
+ts_cor(estacionaria)
+```
+
+A partir de los gráficos se identifica que q = 1 y p = 1.
+Entonces es un modelo arimax(1,1,1)
+
+# Modelo ARIMAX
+```{r}
+arimax <- arima(muestra_end,
+                order = c(1, 1, 1), 
+                xreg = muestra_exo1,
+                method = "ML")
+summary(arimax)
+```
+ 
+```{r}
+print(length(muestra_end))
+print(length(muestra_exo1))
+```
+
+```{r}
+coeftest(arimax)
+```
+
+### TBP
+
+```{r}
+# Endogena
+
+# Exogena
+muestra_TPB <- tbp.ts
+
+   # Exogena para la estimacion
+   muestra_TBP1 <- window(muestra_TPB , 
+                          start = c(2023, 1),
+                          end = c(2023,335),
+                          freq = 365)
+
+   # Exogena para la proyeccion
+   muestra_TBP2<- window(muestra_TPB,
+                          start = c(2023, 336),
+                          end = c(2023, 365),
+                          freq = 365)
+
+```
+
+A partir de los gráficos se identifica que q = 1 y p = 1.
+Entonces es un modelo arimax(1,1,1)
+
+# Modelo ARIMAX
+```{r}
+arimax <- arima(muestra_end,
+                order = c(1, 1, 1), 
+                xreg = muestra_TBP1,
+                method = "ML")
+summary(arimax)
+```
+ 
+
+```{r}
+coeftest(arimax)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Análisis exploratorio
+
+## ACF
+
+```{r}
+acf(tpm.ts, lag = 365)
+```
+
+## Suavizar
+
+```{r}
+# Definir el tamaño de la ventana de la media móvil
+k <- 30  # Ventana de 30 días
+
+# Crear un filtro de media móvil
+filtro <- rep(1/k, k)
+
+# Aplicar la media móvil a la serie temporal
+tpm.suavizado <- filter(tpm.ts, filtro, sides = 1)  # "sides = 2" realiza un suavizado centrado
+
+# Visualizar los resultados
+plot(tpm.ts, col = "blue", lwd = 2, ylab = "TPM", main = "Serie Original vs Suavizada")
+lines(tpm.suavizado, col = "red", lwd = 2)
+legend("topright", legend = c("Original", "Suavizado (30 días)"), col = c("blue", "red"), lwd = 2)
+
+
+```
+
+`
+
+```{r}
+# Crear un filtro ponderado
+k <- 60 # Tamaño de la ventana
+pesos <- seq(1, k) / sum(seq(1, k))  # Ponderaciones
+tpm.suavizado_ponderado <- filter(tpm.ts, pesos, sides = 2)
+
+# Visualizar resultados
+plot(tpm.ts, col = "blue", lwd = 2, ylab = "TPM", main = "Serie Original vs Suavizada")
+lines(tpm.suavizado_ponderado, col = "red", lwd = 2)
+legend("topright", legend = c("Original", "Suavizado Ponderado"), col = c("blue", "red"), lwd = 2)
+
+```
+
+```{r}
+# Suavizado por splines
+tpm.spl <- smooth.spline(time(tpm.ts), tpm.ts, spar = 0.65)  # Ajustar el parámetro spar para controlar la suavidad
+
+# Visualizar resultados
+plot(tpm.ts, col = "blue", lwd = 2, ylab = "TPM", main = "Serie Original vs Suavizada por Splines")
+lines(tpm.spl, col = "red", lwd = 2)
+legend("topright", legend = c("Original", "Suavizado por Splines"), col = c("blue", "red"), lwd = 2)
+
+```
+```{r}
+tpm.spl.ts <- ts(tpm.spl$y, start = start(tpm.ts), frequency = frequency(tpm.ts))
+
+# Verificar el resultado
+print(tpm.spl.ts)
+```
+```{r}
+tpm_dif1 <- diff(log(tpm.spl.ts))
+acf(tpm_dif1)
+```
+
+
+
+
+```{r}
+acf(tpm.spl.ts, lag = 365)
+```
+
+
+
+
+```{r}
+tpm.spl.dif1 <- diff(tpm.spl.ts, differences = 1)
+plot(tpm.spl.dif1)
+```
+
+
+
+
+## ACF
+
+```{r}
+acf(tbp.ts, lag = 365)
+```
+
+## Suavizar
+
+```{r}
+# Definir el tamaño de la ventana de la media móvil
+k <- 7  # Ventana de 30 días
+
+# Crear un filtro de media móvil
+filtro <- rep(1/k, k)
+
+# Aplicar la media móvil a la serie temporal
+tbp.suavizado <- filter(tbp.ts, filtro, sides = 1)  # "sides = 2" realiza un suavizado centrado
+
+# Visualizar los resultados
+plot(tbp.ts, col = "blue", lwd = 2, ylab = "TPM", main = "Serie Original vs Suavizada")
+lines(tbp.suavizado, col = "red", lwd = 2)
+legend("topright", legend = c("Original", "Suavizado (30 días)"), col = c("blue", "red"), lwd = 2)
+
+
+```
+
+
+```{r}
+# Crear un filtro ponderado
+k <- 14 # Tamaño de la ventana
+pesos <- seq(1, k) / sum(seq(1, k))  # Ponderaciones
+tbp.suavizado_ponderado <- filter(tbp.ts, pesos, sides = 2)
+
+# Visualizar resultados
+plot(tbp.ts, col = "blue", lwd = 2, ylab = "TPM", main = "Serie Original vs Suavizada")
+lines(tbp.suavizado_ponderado, col = "red", lwd = 2)
+legend("topright", legend = c("Original", "Suavizado Ponderado"), col = c("blue", "red"), lwd = 2)
+
+```
+
+```{r}
+# Suavizado por splines
+tbp.spl <- smooth.spline(time(tbp.ts), tbp.ts, spar = 0.65)  # Ajustar el parámetro spar para controlar la suavidad
+
+# Visualizar resultados
+plot(tbp.ts, col = "blue", lwd = 2, ylab = "TPM", main = "Serie Original vs Suavizada por Splines")
+lines(tbp.spl, col = "red", lwd = 2)
+legend("topright", legend = c("Original", "Suavizado por Splines"), col = c("blue", "red"), lwd = 2)
+
+```
+```{r}
+tbp.spl.ts <- ts(tbp.spl$y, start = start(tbp.ts), frequency = frequency(tbp.ts))
+
+# Verificar el resultado
+print(tbp.spl.ts)
+```
+
+```{r}
+tbp_dif1 <- diff(log(tbp.spl.ts))
+acf(tbp_dif1, lag = 100)
+```
+
+
+
+
+
