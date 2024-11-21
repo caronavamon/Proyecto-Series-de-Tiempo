@@ -17,6 +17,9 @@ library(tseries)
 library(forecast)
 library(TSstudio)
 library(rugarch)
+library(astsa)
+library(gridExtra)
+library(FinTS)
 
 setwd("C:/Users/andre/OneDrive/Documentos/UCR/SERIES/PROYECTO")
 ```
@@ -52,85 +55,51 @@ cambio <- cola(cambio)
 
 colnames(cambio)[1:2] <- c("Compra", "Venta")
 
-precio <- (cambio$Venta + cambio$Compra)/2
+precio <- (cambio$Compra + cambio$Venta)/2
 
-precio.ts <- ts(precio, frequency = 365)
+precio.ts <- ts(precio, start = c(2023, 1), frequency = 365)
 
-plot.ts(precio.ts, main = "Fig 1: Precio del dólar en colones 2023", col = "blue", ylab = "Precio", xlab = "Tiempo (días)")
+plot.ts(precio.ts, col = "blue", ylab = "Precio", xlab = "Días")
+
+lag.plot(precio.ts, 12)
 ```
 
 ```{r}
-summary(precio.ts)
+rend.log <- diff(log(precio.ts))
+rend.log.abs <- abs(rend.log)
+rend.log.square <- rend.log^2
+
+plot.ts(rend.log, col = "blue", main = "Rendimientos logarítmicos", ylab = "Rendimientos logarítmicos", xlab = "Días")
+plot.ts(rend.log.square, col = "blue", ylab = "Rendimientos logarítmicos ^2", xlab = "Días")
+acf(rend.log)
+pacf(rend.log.square)
+
+acf(rend.log)
+pacf(rend.log)
+
+acf(rend.log.abs)
+acf(rend.log.square)
+par(mfrow = c(2,2))
+mean(rend.log)
+
+create_acf_pacf_plot <- function() {
+  par(mfrow = c(2, 2))
+
+  acf(rend.log, main = "ACF retornos logaítmicos")
+  pacf(rend.log, main = "PACF retornos logarítmicos")
+
+  acf(rend.log.abs, main = "ACF retornos logarítmicos absolutos")
+  acf(rend.log.square, main = "ACF retornos logarítmicos al cuadrado")
+
+  par(mfrow = c(1, 1))
+}
+
+create_acf_pacf_plot()
 ```
 
 ```{r}
-lag.plot(precio.ts, lags = 1, set.lags = 3)
-lag.plot(precio.ts, lags = 1, set.lags = 7)
-lag.plot(precio.ts, lags = 1, set.lags = 15)
-lag.plot(precio.ts, lags = 1, set.lags = 30)
-lag.plot(precio.ts, lags = 1, set.lags = 60)
-lag.plot(precio.ts, lags = 1, set.lags = 90)
-lag.plot(precio.ts, lags = 1, set.lags = 120)
-lag.plot(precio.ts, lags = 1, set.lags = 240)
-```
-
-```{r}
-fit <- lm(precio.ts ~ time(precio.ts), na.action = NULL)
-
-plot(resid(fit))
-plot(diff(precio.ts))
-
-acf(precio.ts, 15)
-acf(resid(fit), 15)
-acf(diff(precio.ts), 15)
-```
-
-```{r}
-ma <- filter(precio.ts, rep(1/30,30), sides=2)
-ma2 <- filter(precio.ts, rep(1/90,90), sides=2)
-ma3 <- filter(precio.ts, rep(1/120,120), sides=2)
-plot(precio.ts)
-lines(ma, col="red")
-lines(ma2, col="blue")
-lines(ma3, col="green")
-```
-
-```{r}
-plot(precio.ts)
-lines(ksmooth(time(precio.ts), precio.ts, "normal", bandwidth = 1/5), col = "red")
-```
-
-### Rendimientos simples
-
-```{r}
-rend <- diff(precio.ts, lag = 1)
-
-plot.ts(rend, main = "Rendimientos simples", col = "blue", ylab = "u_i", xlab = "Tiempo (días)")
-```
-
-```{r}
-hist(rend, 
-     breaks = 30, 
-     probability = TRUE, 
-     col = "lightblue", 
-     main = "Histograma de rendimientos simples vs. distribución normal",
-     xlab = "Rendimientos simples")
-
-curve(dnorm(x, mean = mean(rend), sd = sd(rend)), 
-      col = "red", 
-      lwd = 2, 
-      add = TRUE)
-
-legend("topright", legend = c("Rendimientos", "Distribución normal"), 
-       col = c("lightblue", "red"), lwd = c(5, 2))
-```
-
-### Rendimientos logarítmicos
-
-```{r}
-rend.log <- diff(log(precio.ts), lag = 1)
-
-plot.ts(rend.log, main = "Rendimimientos logarítmicos", col = "blue", ylab = "u_i", xlab = "Tiempo (días)")
+AutocorTest(rend.log,lag=30)
+ArchTest(rend.log, lag=15)
 ```
 
 ```{r}
@@ -138,8 +107,9 @@ hist(rend.log,
      breaks = 30, 
      probability = TRUE, 
      col = "lightblue", 
-     main = "Histograma de rendimientos logarítmicos vs. distribución normal",
-     xlab = "Rendimientos logarítmicos")
+     main = "Histograma de rendimientos logarítmicos",
+     xlab = "Rendimientos logarítmicos",
+ylab="Densidad")
 
 curve(dnorm(x, mean = mean(rend.log), sd = sd(rend.log)), 
       col = "red", 
@@ -148,6 +118,40 @@ curve(dnorm(x, mean = mean(rend.log), sd = sd(rend.log)),
 
 legend("topright", legend = c("Rendimientos logarítmicos", "Distribución normal"), 
        col = c("lightblue", "red"), lwd = c(5, 2))
+```
+
+```{r}
+library(gridExtra)
+
+p1 <-plot.ts(precio.ts, col = "blue", ylab = "Precio", xlab = "Días")
+
+p2 <- recordPlot({
+  hist(rend.log, 
+       breaks = 30, 
+       probability = TRUE, 
+       col = "lightblue", 
+       main = "",
+       xlab = "Rendimientos logarítmicos",
+       ylab = "Densidad")
+
+  curve(dnorm(x, mean = mean(rend.log), sd = sd(rend.log)), 
+        col = "red", 
+        lwd = 2, 
+        add = TRUE)
+
+  legend("topright", 
+         legend = c("Rendimientos logarítmicos", "Distribución normal"), 
+         col = c("lightblue", "red"), 
+         lwd = c(5, 2))
+})
+
+combined_plot <- grid.arrange(p1, p2, ncol = 2)
+
+print(combined_plot)
+```
+
+```{r}
+lag.plot(precio.ts, 12)
 ```
 
 ### Tasa de Política Monetaria
@@ -163,11 +167,21 @@ tpm$TPM <- gsub(",", ".", tpm$TPM)
 
 tpm$TPM <- as.numeric(tpm$TPM)
 
-tpm <- cola(tpm)
+tpm <- tpm$TPM
 
-tpm.ts <- ts(tpm, frequency = 365)
+tpm <- tpm
+
+tpm.ts <- ts(tpm, start = c(2023, 1), frequency = 365)
 
 plot.ts(tpm.ts, main = "Fig 2: Tasa de Política Monetaria 2023", col = "blue", ylab = "TPM", xlab = " (días)")
+
+lag2.plot(precio.ts, tpm.ts, 15)
+
+ccf(precio.ts, tpm.ts, main = "")
+ccf(precio.ts, tbp.ts, main = "")
+ccf(precio.ts, ffer.ts, main = "")
+ccf(precio.ts, ipc.ts.diaria, main = "")
+ccf(precio.ts, imae.ts.diaria, main = "")
 ```
 
 ```{r}
@@ -215,9 +229,13 @@ tbp$TBP <- as.numeric(tbp$TBP)
 
 tbp <- cola(tbp)
 
-tbp.ts <-ts(tbp, frequency = 365)
+tbp <- tbp$TBP
+
+tbp.ts <-ts(tbp, start = c(2023, 1), frequency = 365)
 
 plot.ts(tbp.ts, main = "Fig 3: Tasa Básica Pasiva 2023", col = "blue", ylab = "TPM", xlab = " (días)")
+
+lag2.plot(precio.ts, tbp.ts, 15)
 ```
 
 ```{r}
@@ -260,13 +278,15 @@ lines(ksmooth(time(tbp.ts), tbp.ts, "normal", bandwidth = 0.2), col = "red")
 La tasa de fondos federales es la tasa de interés a la que las instituciones depositarias intercambian fondos federales (saldos mantenidos en los bancos de la Reserva Federal) entre sí durante la noche. Cuando una institución depositaria tiene saldos excedentes en su cuenta de reserva, presta a otros bancos que necesitan saldos mayores. En términos más simples, un banco con exceso de efectivo, lo que a menudo se conoce como liquidez, prestará a otro banco que necesita aumentar rápidamente la liquidez. La tasa que la institución prestataria paga a la institución prestamista se determina entre los dos bancos; la tasa promedio ponderada para todos estos tipos de negociaciones se denomina tasa efectiva de fondos federales. La tasa efectiva de fondos federales está determinada esencialmente por el mercado, pero la Reserva Federal influye en ella a través de operaciones de mercado abierto para alcanzar la tasa objetivo de fondos federales.
 
 ```{r}
-ffer <- read.csv("FEDFUNDS.csv", sep = ",", header = T)
+ffer <- read.csv("DFF.csv", sep = ",", header = T)
 
-ffer <- cola(ffer)
+ffer <- ffer$DFF
 
-ffer.ts <- ts(ffer$FEFUNDS, frequency = 12)
+ffer.ts <- ts(ffer, start = c(2023, 1), frequency = 365)
 
 plot.ts(ffer.ts, main = "Fig 4: FFER 2023", col = "blue", ylab = "FFER", xlab = "Tiempo (meses)")
+
+lag2.plot(precio.ts, ffer.ts, 15)
 ```
 
 ```{r}
@@ -319,6 +339,16 @@ ipc <- cola(ipc)
 ipc.ts <- ts(ipc$Nivel, frequency = 12)
 
 plot.ts(ipc.ts, main = "Fig 5: índice de Precios al Consumidor 2023", col = "blue", ylab = "IPC", xlab = "Tiempo (meses)")
+
+days_in_month <- c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)  # 2023 is not a leap year
+
+# Resample the imae.ts by repeating each month's value for the corresponding number of days
+ipc.ts_daily <- rep(ipc.ts, times = days_in_month)
+
+# Create a new time series object with daily frequency
+ipc.ts.diaria <- ts(ipc.ts_daily, start = c(2023, 1), frequency = 365)
+
+lag2.plot(precio.ts, ipc.ts.diaria, 15)
 ```
 
 ```{r}
@@ -371,6 +401,14 @@ imae <- cola(imae)
 imae.ts <- ts(imae$Nivel, frequency = 12)
 
 plot.ts(imae.ts, main = "Fig 6: Índice Mensual de Actividad Económica 2023", col = "blue", ylab = "IMAE", xlab = "Tiempo (meses)")
+
+days_in_month <- c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+imae_daily <- rep(imae.ts, times = days_in_month)
+
+imae.ts.diaria <- ts(imae_daily, start = c(2023, 1), frequency = 365)
+
+lag2.plot(precio.ts, imae.ts.diaria, 15)
 ```
 
 ```{r}
@@ -407,4 +445,82 @@ lines(ma3, col="green")
 ```{r}
 plot(imae.ts)
 lines(ksmooth(time(imae.ts), imae.ts, "normal", bandwidth = 1/5), col = "red")
+```
+
+# CORRELACIÓN
+
+```{r}
+precio.ts_uni <- ts(as.vector(precio.ts))
+tpm.ts_uni <- ts(as.vector(tpm.ts))
+ccf_result <- ccf(precio.ts_uni, tpm.ts_uni)
+plot(precio.ts, tpm.ts)
+cor(as.vector(precio.ts), as.vector(tpm.ts))
+plot(cbind(precio.ts, tpm.ts))
+```
+
+```{r}
+library(rugarch)
+library(zoo)
+
+all_data <- merge(precio.ts, ffer_daily.ts, tpm.ts)
+all_data <- na.omit(all_data)
+
+returns <- diff(log(all_data[,1]))
+
+exog_vars <- all_data[,2:3]
+exog_vars <- exog_vars[-1,]
+
+spec <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1,1), 
+                        external.regressors = exog_vars),
+  mean.model = list(armaOrder = c(1,1), include.mean = TRUE),
+  distribution.model = "norm"
+)
+
+fit <- ugarchfit(spec, returns)
+
+print(fit)
+
+forecast_exog <- matrix(c(
+  rep(tail(exog_vars[,1], 1), 7),
+  rep(tail(exog_vars[,2], 1), 7)
+), ncol = 2)
+
+forecast <- ugarchforecast(fit, n.ahead = 7, external.forecasts = list(mregfor = forecast_exog))
+
+volatility_forecast <- sigma(forecast)
+print(volatility_forecast)
+
+plot(volatility_forecast, type = "l", main = "Forecasted Volatility", 
+     xlab = "Days", ylab = "Volatility")
+```
+
+```{r}
+expand_monthly_to_daily <- function(monthly_vector, year) {
+  dates <- seq(as.Date(paste0(year, "-01-01")), as.Date(paste0(year, "-12-31")), by = "day")
+
+  daily_vector <- numeric(length(dates))
+
+  current_month <- 1
+  for (i in seq_along(dates)) {
+    if (month(dates[i]) > current_month) {
+      current_month <- month(dates[i])
+    }
+    daily_vector[i] <- monthly_vector[current_month]
+  }
+
+  daily_ts <- ts(daily_vector, frequency = 365)
+  
+  return(daily_ts)
+}
+
+year <- 2023
+
+ffer_daily.ts <- expand_monthly_to_daily(ffer$FEFUNDS, year)
+
+ffer_daily.ts_uni <- ts(as.vector(ffer_daily.ts))
+ccf_result <- ccf(precio.ts_uni, ffer_daily.ts_uni)
+plot(precio.ts, ffer_daily.ts)
+cor(as.vector(precio.ts), as.vector(ffer_daily.ts))
+plot(cbind(precio.ts, ffer_daily.ts))
 ```
